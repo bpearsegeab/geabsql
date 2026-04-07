@@ -17,7 +17,8 @@ QUESTIONS = [
         "points": 1,
         "text": (
             "Write a query to return the **full name** and **phone number** of all customers "
-            "with the postcode **'RG40 2DB'**, ordered alphabetically by name."
+            "with the postcode **'RG40 2DB'**, ordered alphabetically by name. "
+            "Your result must contain exactly these two columns: Full_Name, Phone_Number."
         ),
         "hint": "You will need to join through Contact to reach the Address table.",
         "reference_sql": """
@@ -36,7 +37,8 @@ QUESTIONS = [
         "points": 1,
         "text": (
             "Write a query to return the **film name** and **genre** of all videos that have "
-            "a daily rental rate of more than **2.50**, ordered by daily rate descending."
+            "a daily rental rate of more than **2.50**, ordered by daily rate descending. "
+            "Your result must contain exactly these two columns: Film_Name, Genre."
         ),
         "hint": "",
         "reference_sql": """
@@ -64,8 +66,8 @@ QUESTIONS = [
         "points": 2,
         "text": (
             "Write a query to find all videos rented in **March 2025** by customers whose postcode "
-            "starts with **'RG40'**. Return the customer's **full name**, the **film name**, and the "
-            "**rental start date**."
+            "starts with **'RG40'**. "
+            "Your result must contain exactly these three columns: Full_Name, Film_Name, Rental_Start_Date."
         ),
         "hint": "Consider which tables you need to join and how dates are filtered.",
         "reference_sql": """
@@ -87,9 +89,9 @@ QUESTIONS = [
         "tier": "Intermediate",
         "points": 3,
         "text": (
-            "Write a query to find the **most popular video genre by postcode**. Return the "
-            "**postcode**, **genre**, and the **number of rentals**. Only include postcodes with "
-            "more than **5 total rentals**."
+            "Write a query to find the **most popular video genre by postcode**. "
+            "Only include postcodes with more than **5 total rentals**. "
+            "Your result must contain exactly these three columns: Postcode, Genre, rental_count."
         ),
         "hint": "Think about how to group, count, and filter aggregated results.",
         "reference_sql": """
@@ -114,7 +116,8 @@ QUESTIONS = [
             "Write a query to calculate the **total rental revenue generated per genre**. "
             "Assume revenue equals the number of days rented multiplied by the video's daily rate. "
             "**Exclude** any rentals where the video has not yet been returned. "
-            "Order by total revenue descending."
+            "Order by total revenue descending. "
+            "Your result must contain exactly these two columns: Genre, total_revenue."
         ),
         "hint": "Revenue per rental = (Rental_End_Date - Rental_Start_Date) * Daily_Rate. A NULL Rental_End_Date means the video is still on loan.",
         "reference_sql": """
@@ -135,8 +138,9 @@ QUESTIONS = [
         "points": 4,
         "text": (
             "Write a query to find customers who have rented **more than the average number of "
-            "rentals** across all customers. Return the customer's **full name**, their **total "
-            "rentals**, and the **overall average** (rounded to 1 decimal place)."
+            "rentals** across all customers. "
+            "Your result must contain exactly these three columns: Full_Name, total_rentals, avg_rentals "
+            "(rounded to 1 decimal place)."
         ),
         "hint": "You may use subqueries or CTEs.",
         "reference_sql": """
@@ -157,11 +161,10 @@ QUESTIONS = [
         "points": 5,
         "text": (
             "Write a query to identify each customer's **most frequently rented genre**. If a "
-            "customer has a tie between genres, return **all tied genres**. Return the customer's "
-            "**full name**, the **genre**, and the **rental count**. Order by customer name, then "
-            "rental count descending."
+            "customer has a tie between genres, return **all tied genres**. "
+            "Your result must contain exactly these three columns: Full_Name, Genre, rental_count."
         ),
-        "hint": "This requires ranking genres per customer and handling ties. Consider using window functions such as RANK() or DENSE_RANK().",
+        "hint": "This requires ranking genres per customer and handling ties. Consider using window functions such as RANK() or DENSE_RANK(), or a correlated subquery with MAX().",
         "reference_sql": """
             WITH genre_counts AS (
                 SELECT rh.Cust_Id, v.Genre, COUNT(*) as cnt,
@@ -174,9 +177,8 @@ QUESTIONS = [
             FROM genre_counts gc
             JOIN Contact co ON gc.Cust_Id = co.Cust_Id
             WHERE gc.rnk = 1
-            ORDER BY co.Full_Name, gc.cnt DESC
         """,
-        "check_mode": "exact_ordered",
+        "check_mode": "exact_set",
     },
 ]
 
@@ -248,6 +250,13 @@ def score_answer(question, candidate_sql):
 
         mode = question["check_mode"]
         max_pts = question["points"]
+
+        # Check column count mismatch upfront for clearer feedback
+        if mode in ("exact_set", "exact_ordered") and len(cand_cols) != len(ref_cols):
+            return 0, max_pts, (
+                f"Column count mismatch: expected {len(ref_cols)} columns "
+                f"({', '.join(ref_cols)}), got {len(cand_cols)} ({', '.join(cand_cols)})."
+            )
 
         if mode == "value_match":
             if len(cand_rows) == 1 and len(cand_rows[0]) == 1:
