@@ -73,8 +73,7 @@ QUESTIONS = [
         "reference_sql": """
             SELECT co.Full_Name, v.Film_Name, rh.Rental_Start_Date
             FROM Rental_History rh
-            JOIN Customer cu ON rh.Cust_Id = cu.Cust_Id
-            JOIN Contact co ON cu.Cust_Id = co.Cust_Id
+            JOIN Contact co ON rh.Cust_Id = co.Cust_Id
             JOIN Address a ON co.Address_Id = a.Address_Id
             JOIN Videos v ON rh.Video_Id = v.Video_Id
             WHERE rh.Rental_Start_Date >= '2025-03-01'
@@ -89,21 +88,38 @@ QUESTIONS = [
         "tier": "Intermediate",
         "points": 3,
         "text": (
-            "Write a query to find the **most popular video genre by postcode**. "
-            "Only include postcodes with more than **5 total rentals**. "
+            "Write a query to find the **most popular video genre** for each postcode. "
+            "Only include postcodes where the **total number of rentals** (across all genres) "
+            "is more than **5**. If a postcode has a tie between genres, return **all tied genres**. "
             "Your result must contain exactly these three columns: Postcode, Genre, rental_count."
         ),
-        "hint": "Think about how to group, count, and filter aggregated results.",
+        "hint": (
+            "The >5 filter applies to total rentals per postcode, not per (postcode, genre) pair. "
+            "Consider a window function like RANK() partitioned by postcode, or a correlated "
+            "subquery that finds the max genre count per postcode."
+        ),
         "reference_sql": """
-            SELECT a.Postcode, v.Genre, COUNT(*) as rental_count
-            FROM Rental_History rh
-            JOIN Customer cu ON rh.Cust_Id = cu.Cust_Id
-            JOIN Contact co ON cu.Cust_Id = co.Cust_Id
-            JOIN Address a ON co.Address_Id = a.Address_Id
-            JOIN Videos v ON rh.Video_Id = v.Video_Id
-            GROUP BY a.Postcode, v.Genre
-            HAVING COUNT(*) > 5
-            ORDER BY a.Postcode, rental_count DESC
+            WITH postcode_totals AS (
+                SELECT a.Postcode, COUNT(*) AS total_rentals
+                FROM Rental_History rh
+                JOIN Contact co ON rh.Cust_Id = co.Cust_Id
+                JOIN Address a ON co.Address_Id = a.Address_Id
+                GROUP BY a.Postcode
+                HAVING COUNT(*) > 5
+            ),
+            genre_counts AS (
+                SELECT a.Postcode, v.Genre, COUNT(*) AS rental_count,
+                       RANK() OVER (PARTITION BY a.Postcode ORDER BY COUNT(*) DESC) AS rnk
+                FROM Rental_History rh
+                JOIN Contact co ON rh.Cust_Id = co.Cust_Id
+                JOIN Address a ON co.Address_Id = a.Address_Id
+                JOIN Videos v ON rh.Video_Id = v.Video_Id
+                WHERE a.Postcode IN (SELECT Postcode FROM postcode_totals)
+                GROUP BY a.Postcode, v.Genre
+            )
+            SELECT Postcode, Genre, rental_count
+            FROM genre_counts
+            WHERE rnk = 1
         """,
         "check_mode": "exact_set",
     },
@@ -138,11 +154,12 @@ QUESTIONS = [
         "points": 4,
         "text": (
             "Write a query to find customers who have rented **more than the average number of "
-            "rentals** across all customers. "
+            "rentals per customer** (where the average is computed across customers who have "
+            "rented at least once). "
             "Your result must contain exactly these three columns: Full_Name, total_rentals, avg_rentals "
             "(rounded to 1 decimal place)."
         ),
-        "hint": "You may use subqueries or CTEs.",
+        "hint": "You may use subqueries or CTEs. The average = total rentals / number of distinct renting customers.",
         "reference_sql": """
             SELECT co.Full_Name,
                    COUNT(*) as total_rentals,
