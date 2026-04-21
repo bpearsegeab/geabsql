@@ -3,6 +3,7 @@ GEAB RevOps Analyst - SQL Assessment App
 """
 
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import time
 import json
 import os
@@ -72,6 +73,11 @@ st.markdown("""
         color: #B71C1C;
         animation: pulse 1s infinite;
     }
+    .timer-box.idle {
+        background: #ECEFF1;
+        border-color: #90A4AE;
+        color: #455A64;
+    }
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.7; }
@@ -114,7 +120,7 @@ for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-TIME_LIMIT_SECONDS = 30 * 60
+TIME_LIMIT_SECONDS = 45 * 60
 
 
 def get_remaining_time():
@@ -152,90 +158,8 @@ def save_submission(name, answers, results, summary):
     return filepath
 
 
-# =====================
-# LOGIN SCREEN
-# =====================
-if st.session_state.stage == "login":
-    st.markdown("""
-    <div class="geab-header">
-        <div>
-            <h1>GEAB SQL Assessment</h1>
-            <div class="subtitle">RevOps Analyst Role</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("### Welcome")
-        st.markdown(
-            "This assessment tests your SQL skills against a live database. "
-            "You have **30 minutes** to answer 8 questions of increasing difficulty. "
-            "Your queries will be executed against a real database and auto-scored."
-        )
-        st.markdown("---")
-        st.markdown("**How it works:**")
-        st.markdown(
-            "- Questions are grouped into four tiers: Foundation, Intermediate, Advanced, and Expert\n"
-            "- You are not expected to answer every question\n"
-            "- Partial credit is awarded where logic is sound\n"
-            "- Only SELECT queries are permitted\n"
-            "- You can test your queries before submitting"
-        )
-        st.markdown("---")
-        st.markdown("**Scoring:**")
-        scoring_data = {
-            "Tier": ["Foundation (Q1-Q3)", "Intermediate (Q4-Q5)", "Advanced (Q6-Q7)", "Expert (Q8)"],
-            "Points": ["3", "5", "8", "5"],
-            "Cumulative": ["0-3", "4-8", "9-16", "17-21"],
-        }
-        st.table(scoring_data)
-        st.markdown("---")
-        name = st.text_input("Enter your full name to begin:", key="name_input")
-        if st.button("Start Assessment", type="primary", use_container_width=True):
-            if name.strip():
-                st.session_state.candidate_name = name.strip()
-                st.session_state.stage = "assessment"
-                st.session_state.start_time = time.time()
-                st.rerun()
-            else:
-                st.error("Please enter your name.")
-
-
-# =====================
-# ASSESSMENT SCREEN
-# =====================
-elif st.session_state.stage == "assessment":
-    remaining = get_remaining_time()
-
-    if remaining <= 0 and not st.session_state.submitted:
-        st.session_state.time_up = True
-        st.session_state.submitted = True
-        results, summary = score_all(st.session_state.answers)
-        st.session_state.results = results
-        st.session_state.summary = summary
-        save_submission(st.session_state.candidate_name, st.session_state.answers, results, summary)
-        st.session_state.stage = "results"
-        st.rerun()
-
-    urgent_class = "urgent" if remaining < 300 else ""
-    header_col1, header_col2 = st.columns([3, 1])
-    with header_col1:
-        st.markdown(f"""
-        <div class="geab-header">
-            <div>
-                <h1>SQL Assessment</h1>
-                <div class="subtitle">Candidate: {st.session_state.candidate_name}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    with header_col2:
-        st.markdown(f"""
-        <div class="timer-box {urgent_class}">
-            {format_time(remaining)}
-        </div>
-        """, unsafe_allow_html=True)
-
+def render_sidebar():
+    """Shared schema sidebar, used by both review and assessment stages."""
     with st.sidebar:
         st.markdown("### Database Schema")
         st.markdown("**Customer**")
@@ -264,6 +188,9 @@ elif st.session_state.stage == "assessment":
             "- Only SELECT queries are permitted"
         )
 
+
+def render_questions_and_inputs():
+    """Shared question tabs + SQL inputs + Test Query buttons, used by both review and assessment."""
     tiers = ["Foundation", "Intermediate", "Advanced", "Expert"]
     tabs = st.tabs(tiers)
 
@@ -315,6 +242,140 @@ elif st.session_state.stage == "assessment":
                             st.warning("Enter a query first.")
 
                 st.markdown("---")
+
+
+# =====================
+# LOGIN SCREEN
+# =====================
+if st.session_state.stage == "login":
+    st.markdown("""
+    <div class="geab-header">
+        <div>
+            <h1>GEAB SQL Assessment</h1>
+            <div class="subtitle">RevOps Analyst Role</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("### Welcome")
+        st.markdown(
+            "This assessment tests your SQL skills against a live database. "
+            "You have **45 minutes** to answer 8 questions of increasing difficulty. "
+            "Your queries will be executed against a real database and auto-scored."
+        )
+        st.markdown("---")
+        st.markdown("**How it works:**")
+        st.markdown(
+            "- After entering your name, you'll see a **review screen** with all questions and the database schema\n"
+            "- You can draft and test your queries on the review screen — **the timer does not start yet**\n"
+            "- When you click **Start Timer**, the 45-minute countdown begins\n"
+            "- Questions are grouped into four tiers: Foundation, Intermediate, Advanced, and Expert\n"
+            "- You are not expected to answer every question\n"
+            "- Partial credit is awarded where logic is sound\n"
+            "- Only SELECT queries are permitted"
+        )
+        st.markdown("---")
+        st.markdown("**Scoring:**")
+        scoring_data = {
+            "Tier": ["Foundation (Q1-Q3)", "Intermediate (Q4-Q5)", "Advanced (Q6-Q7)", "Expert (Q8)"],
+            "Points": ["3", "5", "8", "5"],
+            "Cumulative": ["0-3", "4-8", "9-16", "17-21"],
+        }
+        st.table(scoring_data)
+        st.markdown("---")
+        name = st.text_input("Enter your full name to begin:", key="name_input")
+        if st.button("Continue to Review", type="primary", use_container_width=True):
+            if name.strip():
+                st.session_state.candidate_name = name.strip()
+                st.session_state.stage = "review"
+                st.rerun()
+            else:
+                st.error("Please enter your name.")
+
+
+# =====================
+# REVIEW SCREEN (timer not yet started)
+# =====================
+elif st.session_state.stage == "review":
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.markdown(f"""
+        <div class="geab-header">
+            <div>
+                <h1>Review &amp; Pre-Draft</h1>
+                <div class="subtitle">Candidate: {st.session_state.candidate_name} &mdash; Timer not started</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with header_col2:
+        st.markdown(f"""
+        <div class="timer-box idle">
+            {format_time(TIME_LIMIT_SECONDS)}
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.info(
+        "Take a moment to review the schema (left) and the questions below. "
+        "You can draft and test queries now — **the timer has not started yet**. "
+        "When you're ready, scroll to the bottom and click **Start Timer** to begin the 45-minute assessment. "
+        "Anything you've drafted will carry over."
+    )
+
+    render_sidebar()
+    render_questions_and_inputs()
+
+    st.markdown("")
+    col_a, col_b, col_c = st.columns([1, 2, 1])
+    with col_b:
+        if st.button("Start Timer & Begin Assessment", type="primary", use_container_width=True):
+            st.session_state.start_time = time.time()
+            st.session_state.stage = "assessment"
+            st.rerun()
+
+
+# =====================
+# ASSESSMENT SCREEN
+# =====================
+elif st.session_state.stage == "assessment":
+    # Auto-refresh every second so the timer ticks down in real time.
+    # debounce=True (default) means refreshes pause briefly while the candidate is typing,
+    # so it won't interrupt them writing queries.
+    st_autorefresh(interval=1000, key="assessment_timer_tick")
+
+    remaining = get_remaining_time()
+
+    if remaining <= 0 and not st.session_state.submitted:
+        st.session_state.time_up = True
+        st.session_state.submitted = True
+        results, summary = score_all(st.session_state.answers)
+        st.session_state.results = results
+        st.session_state.summary = summary
+        save_submission(st.session_state.candidate_name, st.session_state.answers, results, summary)
+        st.session_state.stage = "results"
+        st.rerun()
+
+    urgent_class = "urgent" if remaining < 300 else ""
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.markdown(f"""
+        <div class="geab-header">
+            <div>
+                <h1>SQL Assessment</h1>
+                <div class="subtitle">Candidate: {st.session_state.candidate_name}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with header_col2:
+        st.markdown(f"""
+        <div class="timer-box {urgent_class}">
+            {format_time(remaining)}
+        </div>
+        """, unsafe_allow_html=True)
+
+    render_sidebar()
+    render_questions_and_inputs()
 
     st.markdown("")
     col_sub1, col_sub2, col_sub3 = st.columns([1, 2, 1])
