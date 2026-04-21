@@ -16,7 +16,7 @@ QUESTIONS = [
         "tier": "Foundation",
         "points": 1,
         "text": (
-            "Write a query to return the **full name** and **phone number** of all customers "
+            "Write a query to return the **full name** and **phone number** of all contacts "
             "with the postcode **'RG40 2DB'**, ordered alphabetically by name. "
             "Your result must contain exactly these two columns: Full_Name, Phone_Number."
         ),
