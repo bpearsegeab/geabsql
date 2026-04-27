@@ -198,6 +198,10 @@ def render_questions_and_inputs():
     for q in QUESTIONS:
         tier_questions.setdefault(q["tier"], []).append(q)
 
+    # Ensure the test-results store exists in session state
+    if "test_results" not in st.session_state:
+        st.session_state.test_results = {}
+
     for tab, tier in zip(tabs, tiers):
         with tab:
             for q in tier_questions.get(tier, []):
@@ -223,26 +227,51 @@ def render_questions_and_inputs():
                 )
                 st.session_state.answers[q["id"]] = sql_input
 
-                col_test, col_spacer = st.columns([1, 3])
+                col_test, col_clear, col_spacer = st.columns([1, 1, 3])
                 with col_test:
-                    if st.button(f"Test Query", key=f"test_{q['id']}"):
+                    if st.button("Test Query", key=f"test_{q['id']}"):
                         if sql_input.strip():
                             try:
                                 cols, rows = run_query(sql_input.strip().rstrip(";"))
-                                st.success(f"Query returned {len(rows)} rows.")
-                                if rows:
-                                    import pandas as pd
-                                    df = pd.DataFrame(rows[:10], columns=cols)
-                                    st.dataframe(df, use_container_width=True)
-                                    if len(rows) > 10:
-                                        st.caption(f"Showing first 10 of {len(rows)} rows.")
+                                st.session_state.test_results[q["id"]] = {
+                                    "status": "success",
+                                    "cols": cols,
+                                    "rows": rows,
+                                }
                             except Exception as e:
-                                st.error(f"SQL Error: {e}")
+                                st.session_state.test_results[q["id"]] = {
+                                    "status": "error",
+                                    "message": str(e),
+                                }
                         else:
-                            st.warning("Enter a query first.")
+                            st.session_state.test_results[q["id"]] = {
+                                "status": "warning",
+                                "message": "Enter a query first.",
+                            }
+                with col_clear:
+                    if q["id"] in st.session_state.test_results:
+                        if st.button("Clear", key=f"clear_{q['id']}"):
+                            del st.session_state.test_results[q["id"]]
+
+                # Render any stored test result for this question (survives reruns)
+                result = st.session_state.test_results.get(q["id"])
+                if result:
+                    if result["status"] == "success":
+                        rows = result["rows"]
+                        cols = result["cols"]
+                        st.success(f"Query returned {len(rows)} rows.")
+                        if rows:
+                            import pandas as pd
+                            df = pd.DataFrame(rows[:10], columns=cols)
+                            st.dataframe(df, use_container_width=True)
+                            if len(rows) > 10:
+                                st.caption(f"Showing first 10 of {len(rows)} rows.")
+                    elif result["status"] == "error":
+                        st.error(f"SQL Error: {result['message']}")
+                    elif result["status"] == "warning":
+                        st.warning(result["message"])
 
                 st.markdown("---")
-
 
 # =====================
 # LOGIN SCREEN
